@@ -3,12 +3,11 @@ package org.bunrieu.sqlgamepixel.dto;
 import java.util.List;
 import java.util.Map;
 
-// data returned to the player after SQL command
 public class GameStateResponse {
     private String message;
-    private PlayerDto player;// info & position
+    private PlayerDto player;
     private List<Map<String, Object>> dataTable;
-    private Map<Integer, Boolean> levelProgress; // 16 level status
+    private List<Map<String, Boolean>> levelProgress;
 
     public List<Map<String, Object>> getDataTable() {
         return dataTable;
@@ -34,11 +33,11 @@ public class GameStateResponse {
         this.player = player;
     }
 
-    public Map<Integer, Boolean> getLevelProgress() {
+    public List<Map<String, Boolean>> getLevelProgress() {
         return levelProgress;
     }
 
-    public void setLevelProgress(Map<Integer, Boolean> levelProgress) {
+    public void setLevelProgress(List<Map<String, Boolean>> levelProgress) {
         this.levelProgress = levelProgress;
     }
 }
