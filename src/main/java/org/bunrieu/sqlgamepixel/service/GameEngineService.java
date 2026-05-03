@@ -3,9 +3,10 @@ package org.bunrieu.sqlgamepixel.service;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.select.*;
-import net.sf.jsqlparser.expression.Alias;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.SetOperationList;
 import org.bunrieu.sqlgamepixel.dto.GameStateResponse;
 import org.bunrieu.sqlgamepixel.dto.PlayerDto;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,13 +18,23 @@ import java.util.*;
 public class GameEngineService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlayerService playerService;
+    private final QuestService questService;
+    private final AchievementService achievementService;
+
     private PlayerDto player = new PlayerDto();
     private int currentChapter = 1;
     private Map<Integer, Boolean> levelProgress = new LinkedHashMap<>();
 
-    public GameEngineService(JdbcTemplate jdbcTemplate) {
+    public GameEngineService(
+            JdbcTemplate jdbcTemplate,
+            PlayerService playerService,
+            QuestService questService,
+            AchievementService achievementService) {
         this.jdbcTemplate = jdbcTemplate;
-        // 16 levels: 5 per chapter (chapters 1-3), 1 for final boss
+        this.playerService = playerService;
+        this.questService = questService;
+        this.achievementService = achievementService;
         for (int i = 1; i <= 16; i++) {
             levelProgress.put(i, i == 1);
         }
@@ -41,7 +52,6 @@ public class GameEngineService {
         }
     }
 
-    // CHAPTER 1: QUAIVAT — SELECT, WHERE, AND/OR, LIKE, ORDER BY
     private void setupChapter1() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS QUAIVAT;");
         jdbcTemplate.execute("DROP TABLE IF EXISTS KHUVUC;");
@@ -84,7 +94,6 @@ public class GameEngineService {
         player.setCurrentLevel(1);
     }
 
-    // CHAPTER 2: SINHVIEN + MONHOC — ORDER BY, LIMIT, OFFSET, DISTINCT
     private void setupChapter2() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS SINHVIEN;");
         jdbcTemplate.execute("DROP TABLE IF EXISTS MONHOC;");
@@ -130,7 +139,6 @@ public class GameEngineService {
         player.setCurrentLevel(6);
     }
 
-    // CHAPTER 3: SANPHAM + LOAISANPHAM — COUNT, SUM, AVG, MAX, MIN, GROUP BY, HAVING
     private void setupChapter3() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS SANPHAM;");
         jdbcTemplate.execute("DROP TABLE IF EXISTS LOAISANPHAM;");
@@ -206,26 +214,33 @@ public class GameEngineService {
                 response.setDataTable(result);
                 response.setMessage(">> SYSTEM: Data retrieved successfully. " + result.size() + " rows returned.");
             } else {
-                // INSERT/UPDATE/DELETE — execute and report
                 int affected = jdbcTemplate.update(sql);
                 response.setMessage(">> SYSTEM: " + affected + " row(s) affected.");
             }
 
-            // Validate level
             int currentLv = player.getCurrentLevel();
             int chapter = getChapterForLevel(currentLv);
-
             boolean isPassed = validateLevelLogic(currentLv, sql, chapter);
 
             if (isPassed) {
+                giveLevelRewards(currentLv);
+
                 int nextLv = currentLv + 1;
                 levelProgress.put(nextLv, true);
                 player.setCurrentLevel(nextLv);
 
+                List<String> newAch = achievementService.checkAndUnlockAchievements("player1");
+                if (!newAch.isEmpty()) {
+                    response.setMessage(response.getMessage()
+                            + "\n>> ACHIEVEMENT UNLOCKED: " + String.join(", ", newAch));
+                }
+
                 if (nextLv <= 16) {
-                    response.setMessage(response.getMessage() + "\n>> SYSTEM: LEVEL CLEARED! Advancing to Level " + nextLv + "...");
+                    response.setMessage(response.getMessage()
+                            + "\n>> SYSTEM: LEVEL CLEARED! Advancing to Level " + nextLv + "...");
                 } else {
-                    response.setMessage(response.getMessage() + "\n>> SYSTEM: CONGRATULATIONS! You have mastered all chapters!");
+                    response.setMessage(response.getMessage()
+                            + "\n>> SYSTEM: CONGRATULATIONS! You have mastered all chapters!");
                 }
             }
 
@@ -238,6 +253,21 @@ public class GameEngineService {
         return finishResponse(response);
     }
 
+    private void giveLevelRewards(int level) {
+        String username = "player1";
+        playerService.addGold(username, 50, "Level " + level + " completed");
+
+        if (level == 5 || level == 10) {
+            playerService.addGold(username, 200, "Chapter " + getChapterForLevel(level) + " completed!");
+        }
+        if (level == 16) {
+            playerService.addGold(username, 500, "All chapters completed!");
+        }
+
+        playerService.getProfile(username);
+        questService.incrementDailyProgress(username, 1);
+    }
+
     private GameStateResponse finishResponse(GameStateResponse response) {
         response.setPlayer(this.player);
         response.setLevelProgress(toList(this.levelProgress));
@@ -248,12 +278,12 @@ public class GameEngineService {
 
     private boolean validateLevelLogic(int level, String sql, int chapter) {
         try {
+            // Đã fix lỗi CCJSqlParserUtil tại đây
             Statement stmt = CCJSqlParserUtil.parse(sql);
-            String upperSql = sql.trim().toUpperCase();
 
-            if (chapter == 1) return validateChapter1(level, stmt, upperSql);
-            if (chapter == 2) return validateChapter2(level, stmt, upperSql);
-            if (chapter == 3) return validateChapter3(level, stmt, upperSql);
+            if (chapter == 1) return validateChapter1(level, stmt, sql);
+            if (chapter == 2) return validateChapter2(level, stmt, sql);
+            if (chapter == 3) return validateChapter3(level, stmt, sql);
 
             return false;
         } catch (JSQLParserException e) {
@@ -261,32 +291,31 @@ public class GameEngineService {
         }
     }
 
-    // ---- Chapter 1: QUAIVAT table ----
-    private boolean validateChapter1(int level, Statement stmt, String upperSql) {
+    private boolean validateChapter1(int level, Statement stmt, String sql) {
         if (!(stmt instanceof Select)) return false;
         PlainSelect ps = getPlainSelect((Select) stmt);
         if (ps == null) return false;
         String from = ps.getFromItem().toString().toUpperCase().replaceAll("\\s+", "");
 
         switch (level) {
-            case 1: // SELECT * FROM QUAIVAT
+            case 1:
                 return from.equals("QUAIVAT") && ps.getSelectItems().stream()
                         .anyMatch(s -> s.toString().equalsIgnoreCase("*"));
-            case 2: // SELECT TenQuai, DacTinh FROM QUAIVAT
+            case 2:
                 if (!from.equals("QUAIVAT")) return false;
                 String cols = ps.getSelectItems().toString().toUpperCase().replaceAll("\\s+", "");
                 return cols.contains("TENQUAI") && cols.contains("DACTINH") && ps.getSelectItems().size() == 2;
-            case 3: // WHERE MaQuai = 3
+            case 3:
                 if (!from.equals("QUAIVAT")) return false;
                 if (ps.getWhere() == null) return false;
                 String where3 = ps.getWhere().toString().toUpperCase().replaceAll("[\\s'\"`]", "");
                 return where3.contains("MAQUAI=3") || where3.contains("MAQUAI = 3");
-            case 4: // WHERE MaKhuVuc = 'Z1' AND NgayThucTinh > '2021-01-01'
+            case 4:
                 if (!from.equals("QUAIVAT")) return false;
                 if (ps.getWhere() == null) return false;
                 String where4 = ps.getWhere().toString().toUpperCase().replaceAll("[\\s'\"`]", "");
                 return where4.contains("Z1") && (where4.contains("AND") || where4.contains("&&"));
-            case 5: // ORDER BY NgayThucTinh ASC LIMIT 1
+            case 5:
                 if (!from.equals("QUAIVAT")) return false;
                 if (ps.getOrderByElements() == null || ps.getLimit() == null) return false;
                 String orderBy = ps.getOrderByElements().get(0).toString().toUpperCase();
@@ -300,38 +329,37 @@ public class GameEngineService {
         }
     }
 
-    // ---- Chapter 2: SINHVIEN + MONHOC table ----
-    private boolean validateChapter2(int level, Statement stmt, String upperSql) {
+    private boolean validateChapter2(int level, Statement stmt, String sql) {
         if (!(stmt instanceof Select)) return false;
         PlainSelect ps = getPlainSelect((Select) stmt);
         if (ps == null) return false;
         String from = ps.getFromItem().toString().toUpperCase().replaceAll("\\s+", "");
 
         switch (level) {
-            case 6: // ORDER BY DiemTB DESC LIMIT 1 → top student
+            case 6:
                 if (!from.equals("SINHVIEN")) return false;
                 if (ps.getOrderByElements() == null || ps.getLimit() == null) return false;
                 String order6 = ps.getOrderByElements().get(0).toString().toUpperCase();
                 return order6.contains("DIEMTB") && order6.contains("DESC")
                         && ps.getLimit().getRowCount() != null
                         && ps.getLimit().getRowCount().toString().equals("1");
-            case 7: // ORDER BY DiemTB ASC LIMIT 1 → lowest student
+            case 7:
                 if (!from.equals("SINHVIEN")) return false;
                 if (ps.getOrderByElements() == null || ps.getLimit() == null) return false;
                 String order7 = ps.getOrderByElements().get(0).toString().toUpperCase();
                 return order7.contains("DIEMTB") && !order7.contains("DESC");
-            case 8: // DISTINCT GioiTinh
+            case 8:
                 if (!from.equals("SINHVIEN")) return false;
                 String cols8 = ps.getSelectItems().toString().toUpperCase();
                 return cols8.contains("DISTINCT") && cols8.contains("GIOITINH");
-            case 9: // LIMIT 3 OFFSET 2  (skip 2, take 3)
+            case 9:
                 if (!from.equals("SINHVIEN")) return false;
                 if (ps.getLimit() == null) return false;
                 if (ps.getLimit().getOffset() == null) return false;
                 String limit9 = ps.getLimit().getRowCount().toString();
                 String offset9 = ps.getLimit().getOffset().toString();
                 return limit9.equals("3") && offset9.equals("2");
-            case 10: { // Complex: WHERE + ORDER BY + LIMIT
+            case 10:
                 if (!from.equals("SINHVIEN")) return false;
                 if (ps.getWhere() == null) return false;
                 if (ps.getOrderByElements() == null || ps.getLimit() == null) return false;
@@ -339,44 +367,42 @@ public class GameEngineService {
                 String order10 = ps.getOrderByElements().get(0).toString().toUpperCase();
                 return where10.contains("DIEMTB") && order10.contains("DIEMTB")
                         && !order10.contains("DESC");
-            }
             default:
                 return false;
         }
     }
 
-    // ---- Chapter 3: SANPHAM + LOAISANPHAM table ----
-    private boolean validateChapter3(int level, Statement stmt, String upperSql) {
+    private boolean validateChapter3(int level, Statement stmt, String sql) {
         if (!(stmt instanceof Select)) return false;
         PlainSelect ps = getPlainSelect((Select) stmt);
         if (ps == null) return false;
         String from = ps.getFromItem().toString().toUpperCase().replaceAll("\\s+", "");
 
         switch (level) {
-            case 11: // COUNT(*)
+            case 11:
                 if (!from.equals("SANPHAM")) return false;
                 String cols11 = ps.getSelectItems().toString().toUpperCase();
                 return cols11.contains("COUNT") || cols11.contains("COUNT(*)");
-            case 12: // SUM(Gia) or AVG(Gia)
+            case 12:
                 if (!from.equals("SANPHAM")) return false;
                 String cols12 = ps.getSelectItems().toString().toUpperCase();
                 return cols12.contains("SUM") || cols12.contains("AVG");
-            case 13: // MAX(Gia) or MIN(Gia)
+            case 13:
                 if (!from.equals("SANPHAM")) return false;
                 String cols13 = ps.getSelectItems().toString().toUpperCase();
                 return cols13.contains("MAX") || cols13.contains("MIN");
-            case 14: // GROUP BY MaLoai
+            case 14:
                 if (!from.equals("SANPHAM")) return false;
                 if (ps.getGroupBy() == null) return false;
                 String group14 = ps.getGroupBy().toString().toUpperCase();
                 return group14.contains("MALOAI");
-            case 15: // GROUP BY + HAVING COUNT(*)
+            case 15:
                 if (!from.equals("SANPHAM")) return false;
                 if (ps.getGroupBy() == null) return false;
                 if (ps.getHaving() == null) return false;
                 String having15 = ps.getHaving().toString().toUpperCase();
                 return having15.contains("COUNT");
-            case 16: // JOIN LOAISANPHAM
+            case 16:
                 if (ps.getJoins() == null || ps.getJoins().isEmpty()) return false;
                 Join join = ps.getJoins().get(0);
                 String joinStr = join.toString().toUpperCase();
@@ -389,13 +415,22 @@ public class GameEngineService {
     // ================= HELPERS =================
 
     private PlainSelect getPlainSelect(Select select) {
-        SelectBody body = select.getSelectBody();
-        if (body instanceof PlainSelect) return (PlainSelect) body;
-        if (body instanceof SetOperationList) {
-            List<SelectBody> selects = ((SetOperationList) body).getSelects();
-            if (!selects.isEmpty() && selects.get(0) instanceof PlainSelect) {
-                return (PlainSelect) selects.get(0);
+        try {
+            // Support for JSqlParser 4.x and 5.x
+            Object body = select.getClass().getMethod("getSelectBody").invoke(select);
+            if (body instanceof PlainSelect) return (PlainSelect) body;
+            if (body instanceof SetOperationList) {
+                List<?> selects = ((SetOperationList) body).getSelects();
+                if (!selects.isEmpty() && selects.get(0) instanceof PlainSelect) {
+                    return (PlainSelect) selects.get(0);
+                }
             }
+        } catch (Exception e) {
+            // Fallback for older versions if needed, though getSelectBody is standard now
+            try {
+                Object ps = select.getClass().getMethod("getPlainSelect").invoke(select);
+                if (ps instanceof PlainSelect) return (PlainSelect) ps;
+            } catch (Exception ignored) {}
         }
         return null;
     }
