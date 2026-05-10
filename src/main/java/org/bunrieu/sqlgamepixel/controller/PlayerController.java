@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/player")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = "*")
 public class PlayerController {
 
     private final PlayerService playerService;
@@ -39,6 +39,14 @@ public class PlayerController {
         return playerService.addGold(username, request.getAmount(), request.getReason());
     }
 
+    @PostMapping("/init-character")
+    public PlayerProfileDto initCharacter(
+        @RequestParam(defaultValue = "player1") String username,
+        @RequestBody InitCharacterRequest request
+    ) {
+        return playerService.initCharacter(username, request.getCharacterId(), request.getNickname());
+    }
+
     public static class SelectCharacterRequest {
         private String characterId;
         public String getCharacterId() { return characterId; }
@@ -52,5 +60,14 @@ public class PlayerController {
         public void setAmount(int amount) { this.amount = amount; }
         public String getReason() { return reason; }
         public void setReason(String reason) { this.reason = reason; }
+    }
+
+    public static class InitCharacterRequest {
+        private String characterId;
+        private String nickname;
+        public String getCharacterId() { return characterId; }
+        public void setCharacterId(String id) { this.characterId = id; }
+        public String getNickname() { return nickname; }
+        public void setNickname(String n) { this.nickname = n; }
     }
 }

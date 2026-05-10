@@ -9,6 +9,8 @@ public class PlayerProfileDto {
     private String selectedCharacterId;
     private CharacterDto selectedCharacter;
     private boolean characterSelected;
+    private String nickname;
+    private String playerNickname;
 
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
@@ -33,4 +35,10 @@ public class PlayerProfileDto {
 
     public boolean isCharacterSelected() { return characterSelected; }
     public void setCharacterSelected(boolean characterSelected) { this.characterSelected = characterSelected; }
+
+    public String getNickname() { return nickname; }
+    public void setNickname(String nickname) { this.nickname = nickname; }
+
+    public String getPlayerNickname() { return playerNickname; }
+    public void setPlayerNickname(String playerNickname) { this.playerNickname = playerNickname; }
 }

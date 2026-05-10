@@ -4,7 +4,9 @@ import org.bunrieu.sqlgamepixel.entity.Achievement;
 import org.bunrieu.sqlgamepixel.entity.Character;
 import org.bunrieu.sqlgamepixel.entity.DailyQuest;
 import org.bunrieu.sqlgamepixel.entity.Item;
+import org.bunrieu.sqlgamepixel.entity.Player;
 import org.bunrieu.sqlgamepixel.entity.Skin;
+import org.bunrieu.sqlgamepixel.entity.User;
 import org.bunrieu.sqlgamepixel.repository.*;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -18,23 +20,29 @@ import java.util.List;
 @Order(1)
 public class DataInitializer implements ApplicationRunner {
 
+    private final UserRepository userRepository;
     private final CharacterRepository characterRepository;
     private final SkinRepository skinRepository;
     private final ItemRepository itemRepository;
     private final DailyQuestRepository dailyQuestRepository;
     private final AchievementRepository achievementRepository;
+    private final PlayerRepository playerRepository;
 
     public DataInitializer(
+            UserRepository userRepository,
             CharacterRepository characterRepository,
             SkinRepository skinRepository,
             ItemRepository itemRepository,
             DailyQuestRepository dailyQuestRepository,
-            AchievementRepository achievementRepository) {
+            AchievementRepository achievementRepository,
+            PlayerRepository playerRepository) {
+        this.userRepository = userRepository;
         this.characterRepository = characterRepository;
         this.skinRepository = skinRepository;
         this.itemRepository = itemRepository;
         this.dailyQuestRepository = dailyQuestRepository;
         this.achievementRepository = achievementRepository;
+        this.playerRepository = playerRepository;
     }
 
     @Override
@@ -45,6 +53,16 @@ public class DataInitializer implements ApplicationRunner {
         initItems();
         initDailyQuests();
         initAchievements();
+        initDefaultUser();
+        initDefaultPlayer();
+    }
+
+    private void initDefaultUser() {
+        if (userRepository.findByUsername("bunrieu20001").isPresent()) return;
+        User user = new User();
+        user.setUsername("bunrieu20001");
+        user.setPassword("vutan123");
+        userRepository.save(user);
     }
 
     private void initCharacters() {
@@ -160,5 +178,17 @@ public class DataInitializer implements ApplicationRunner {
         a.setId(id); a.setName(name); a.setDescription(desc); a.setIcon(icon);
         a.setGoldReward(reward); a.setConditionType(condType); a.setConditionValue(condValue);
         return a;
+    }
+
+    private void initDefaultPlayer() {
+        if (playerRepository.findByUsername("player1").isPresent()) return;
+        Player player = new Player();
+        player.setUsername("player1");
+        player.setGold(0);
+        player.setTotalGoldEarned(0);
+        player.setLevelsCompleted(0);
+        player.setSelectedCharacter(null);
+        player.setNickname(null);
+        playerRepository.save(player);
     }
 }

@@ -50,6 +50,24 @@ public class PlayerService {
     }
 
     @Transactional
+    public PlayerProfileDto initCharacter(String username, String characterId, String nickname) {
+        Player player = playerRepository.findByUsername(username)
+            .orElseGet(() -> {
+                Player newPlayer = new Player();
+                newPlayer.setUsername(username);
+                newPlayer.setGold(0);
+                newPlayer.setTotalGoldEarned(0);
+                newPlayer.setLevelsCompleted(0);
+                return playerRepository.save(newPlayer);
+            });
+
+        player.setSelectedCharacter(characterId);
+        player.setNickname(nickname);
+        playerRepository.save(player);
+        return toProfileDto(player);
+    }
+
+    @Transactional
     public GoldRewardDto addGold(String username, int amount, String reason) {
         Player player = playerRepository.findByUsername(username)
             .orElseThrow(() -> new RuntimeException("Player not found: " + username));
@@ -76,6 +94,8 @@ public class PlayerService {
         PlayerProfileDto dto = new PlayerProfileDto();
         dto.setId(player.getId());
         dto.setUsername(player.getUsername());
+        dto.setNickname(player.getNickname());
+        dto.setPlayerNickname(player.getNickname());
         dto.setGold(player.getGold());
         dto.setTotalGoldEarned(player.getTotalGoldEarned());
         dto.setLevelsCompleted(player.getLevelsCompleted());

@@ -263,8 +263,10 @@ public class ShopService {
         dto.setDescription(c.getDescription());
         dto.setClassLabel(c.getClassLabel());
         dto.setAvatarColor(c.getAvatarColor());
+
         dto.setPrice(c.getPrice());
 
+        dto.setPrice(c.getPrice() != null ? c.getPrice() : 0);
         CharacterDto.StatsDto stats = new CharacterDto.StatsDto();
         stats.setHp(c.getBaseHp());
         stats.setMp(c.getBaseMp());

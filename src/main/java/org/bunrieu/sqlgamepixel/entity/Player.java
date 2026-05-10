@@ -29,6 +29,9 @@ public class Player {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(length = 30)
+    private String nickname;
+
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
 
@@ -49,4 +52,7 @@ public class Player {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getNickname() { return nickname; }
+    public void setNickname(String nickname) { this.nickname = nickname; }
 }
