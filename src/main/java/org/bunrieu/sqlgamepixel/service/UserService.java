@@ -48,6 +48,8 @@ public class UserService {
      */
     @Transactional
     public String register(String username, String password) {
+        username = username == null ? null : username.trim();
+        password = password == null ? null : password.trim();
         String err = validateUsername(username);
         if (err != null) return err;
 
@@ -69,11 +71,27 @@ public class UserService {
      * Login. Returns null on success, error message on failure.
      */
     public String login(String username, String password) {
+        System.out.println("DEBUG LOGIN - username: [" + username + "] length: " + (username != null ? username.length() : "null"));
+        System.out.println("DEBUG LOGIN - password: [" + password + "]");
+
         if (username == null || username.isBlank() || password == null || password.isBlank()) {
             return "Username hoặc mật khẩu không được để trống";
         }
-        return userRepository.findByUsername(username)
-            .map(user -> user.getPassword().equals(password) ? null : "Sai mật khẩu")
-            .orElseGet(() -> "Username không tồn tại");
+
+        var found = userRepository.findByUsername(username);
+        System.out.println("DEBUG LOGIN - found.isPresent(): " + found.isPresent());
+
+        if (found.isPresent()) {
+            User user = found.get();
+            System.out.println("DEBUG LOGIN - DB username: [" + user.getUsername() + "]");
+            System.out.println("DEBUG LOGIN - DB password: [" + user.getPassword() + "]");
+            boolean match = user.getPassword().equals(password);
+            System.out.println("DEBUG LOGIN - password match: " + match);
+            if (match) return null;
+            else return "Sai mật khẩu";
+        } else {
+            System.out.println("DEBUG LOGIN - user NOT found in DB");
+            return "Username không tồn tại";
+        }
     }
 }

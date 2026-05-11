@@ -70,9 +70,10 @@ public class UserController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest req) {
+        System.out.println("CONTROLLER LOGIN - username: [" + req.getUsername() + "] password: [" + req.getPassword() + "]");
         String error = userService.login(req.getUsername(), req.getPassword());
+        System.out.println("CONTROLLER LOGIN - error: [" + error + "]");
         if (error != null) {
-            // Trả về 200 với success=false để tránh UI hiểu nhầm là không kết nối server
             return ResponseEntity.ok(new AuthResponse(false, error));
         }
         return ResponseEntity.ok(new AuthResponse(true, "Đăng nhập thành công!", req.getUsername()));
